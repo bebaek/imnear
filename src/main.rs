@@ -5,30 +5,26 @@ use std::io;
 fn main() {
     let args = Cli::parse();
 
-    if is_stdin_piped() {
-        let paths = io::stdin().lines();
-        let found = imnear::search_from_paths(
-            paths,
-            (args.lat, args.lon),
-            args.radius,
-            &args.dir,
-            args.early_stop_count,
-            args.sort_by_distance,
-            args.verbose,
-        );
-        for f in found.iter() {
-            println!("{}", f.path.to_string_lossy());
-        }
+    let searcher = imnear::Searcher::new(
+        (args.lat, args.lon),
+        args.radius,
+        args.early_stop_count,
+        args.sort_by_distance,
+        args.verbose,
+    );
+
+    let found: Vec<_> = if is_stdin_piped() {
+        io::stdin()
+            .lines()
+            .filter_map(|line| searcher.filter_by_path_str(&line.unwrap()))
+            .collect()
     } else {
-        imnear::search_from_dir(
-            (args.lat, args.lon),
-            args.radius,
-            &args.dir,
-            args.early_stop_count,
-            args.sort_by_distance,
-            args.verbose,
-        );
-    }
+        imnear::visit_paths(&args.dir)
+            .filter_map(|path| searcher.filter_by_path_str(&path))
+            .collect()
+    };
+
+    searcher.print_result(found);
 }
 
 /// Search photos near a geographic location

@@ -29,6 +29,17 @@ demo-pipe-in:
 		--sort-by-distance \
 		--verbose
 
+demo-pipe-in-quiet:
+	cargo build
+	fd --full-path .jpg "$(SAMPLE_DIR)" | "target/debug/$(APP)" "$(TEST_LAT)" "$(TEST_LON)" "$(TEST_RADIUS)" \
+		--sort-by-distance
+
+demo-pipe-out-view:
+	cargo build
+	fd --full-path .jpg "$(SAMPLE_DIR)" \
+		| "target/debug/$(APP)" "$(TEST_LAT)" "$(TEST_LON)" "$(TEST_RADIUS)" --sort-by-distance \
+		| xargs open
+
 install-link:
 	rm "$(HOME)/.local/bin/$(APP)"
 	ln -s "$(shell pwd)/target/debug/$(APP)" "$(HOME)/.local/bin/$(APP)"
