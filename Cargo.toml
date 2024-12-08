@@ -8,5 +8,6 @@ atty = "0.2"
 clap = { version = "4", features = ["derive"] }
 geo = "0.29"
 globwalk = "0"
+kamadak-exif = "0.6"
 latlon = "0.1"
 serde_json = "1"

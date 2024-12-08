@@ -1,5 +1,4 @@
 use std::{
-    io,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -136,7 +135,8 @@ impl Searcher {
 
     // FIXME: return Option<bool> for missing attributes
     fn filter_file(&self, path: &Path) -> Option<FilterResult> {
-        let (lat, lon) = match read_exif(path) {
+        // let (lat, lon) = match read_exif(path) {
+        let (lat, lon) = match read_exif_kamadak(path) {
             Some(loc) => loc,
             None => {
                 return None;
@@ -325,6 +325,7 @@ pub struct FilterResult {
 //     })
 // }
 
+// Much slower than using rust lib
 fn read_exif(path: &Path) -> Option<(f64, f64)> {
     let output = Command::new("exiftool")
         .arg("-json")
@@ -353,6 +354,68 @@ fn read_exif(path: &Path) -> Option<(f64, f64)> {
     Some((lat_f, lon_f))
 }
 
+fn read_exif_kamadak(path: &Path) -> Option<(f64, f64)> {
+    let file = std::fs::File::open(path).unwrap();
+    let mut bufreader = std::io::BufReader::new(&file);
+    let exifreader = exif::Reader::new();
+    // let exif = exifreader.read_from_container(&mut bufreader).unwrap();
+    // Handle error?
+    let exif = match exifreader.read_from_container(&mut bufreader) {
+        Ok(exif) => exif,
+        Err(e) => {
+            // Happened once for an unknown reason
+            eprintln!(
+                "Error reading from file {}: {:?}",
+                path.to_string_lossy(),
+                e
+            );
+            return None;
+        }
+    };
+    let lat: f64;
+    let lon: f64;
+
+    let lat_ref = match &exif.get_field(exif::Tag::GPSLatitudeRef, exif::In::PRIMARY) {
+        Some(field) => field.display_value(),
+        _ => return None,
+    };
+
+    if let exif::Value::Rational(lat_rational) = &exif
+        .get_field(exif::Tag::GPSLatitude, exif::In::PRIMARY)
+        .unwrap()
+        .value
+    {
+        let sign = if lat_ref.to_string() == "W" { -1 } else { 1 };
+        lat = sign as f64
+            * (lat_rational[0].to_f64()
+                + lat_rational[1].to_f64() / 60.0
+                + lat_rational[2].to_f64() / 60.0 / 60.0)
+    } else {
+        return None;
+    };
+
+    let lon_ref = &exif
+        .get_field(exif::Tag::GPSLongitudeRef, exif::In::PRIMARY)
+        .unwrap()
+        .display_value();
+
+    if let exif::Value::Rational(lon_rational) = &exif
+        .get_field(exif::Tag::GPSLongitude, exif::In::PRIMARY)
+        .unwrap()
+        .value
+    {
+        let sign = if lon_ref.to_string() == "W" { -1 } else { 1 };
+        lon = sign as f64
+            * (lon_rational[0].to_f64()
+                + lon_rational[1].to_f64() / 60.0
+                + lon_rational[2].to_f64() / 60.0 / 60.0)
+    } else {
+        return None;
+    };
+
+    Some((lat, lon))
+}
+
 // fn compute_distance(lat0: f64, lon0: f64, lat1: f64, lon1: f64) -> f64 {
 fn compute_distance((lat0, lon0): (f64, f64), (lat1, lon1): (f64, f64)) -> f64 {
     let loc0 = Point::new(lat0, lon0);
@@ -368,3 +431,18 @@ fn compute_distance((lat0, lon0): (f64, f64), (lat1, lon1): (f64, f64)) -> f64 {
 //         .map(|item| item.into_path())
 //         .collect()
 // }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compare_read_exif() {
+        let path = Path::new("samples/sample.jpg");
+
+        let loc_exiftool = read_exif(path).unwrap();
+        let loc_kamadak = read_exif_kamadak(path).unwrap();
+
+        assert_eq!(loc_exiftool, loc_kamadak);
+    }
+}

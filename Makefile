@@ -4,6 +4,12 @@ export
 
 APP = imnear
 
+test:
+	cargo test -- --nocapture
+
+build:
+	cargo build
+
 demo:
 	cargo run -- "$(TEST_LAT)" "$(TEST_LON)" "$(TEST_RADIUS)" --dir "$(SAMPLE_DIR)"
 
