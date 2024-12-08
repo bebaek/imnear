@@ -1,11 +1,12 @@
 use std::{
+    io,
     path::{Path, PathBuf},
     process::Command,
 };
 
 use geo::{Distance, Haversine, Point};
 
-pub fn run(
+pub fn search_from_dir(
     target_loc: (f64, f64),
     radius: f64,
     dir: &str,
@@ -71,6 +72,91 @@ pub fn run(
     if verbose {
         eprintln!("Skip count: {}", skip_count);
     }
+}
+
+pub struct FilterResult {
+    pub path: PathBuf,
+    pub distance: f64,
+    selected: bool,
+    // add time info
+}
+
+pub fn search_from_paths(
+    path_iter: impl Iterator<Item = Result<String, io::Error>>,
+    target_loc: (f64, f64),
+    radius: f64,
+    dir: &str,
+    early_stop_count: isize,
+    sort_by_distance: bool,
+    verbose: bool,
+) -> Vec<FilterResult> {
+    let mut found: Vec<FilterResult> = Vec::new();
+    let mut skip_count: u32 = 0;
+
+    for path_result in path_iter {
+        let path_str = path_result.unwrap();
+        let path = Path::new(&path_str);
+        if verbose {
+            eprintln!("{}", path.to_str().unwrap());
+        }
+
+        let filter_result = match filter_file(path, target_loc, radius) {
+            Some(result) => result,
+            None => {
+                if verbose {
+                    eprintln!("Skipping {}", path.to_str().unwrap());
+                }
+                continue;
+            }
+        };
+        if filter_result.selected {
+            if verbose {
+                eprintln!("{}\t{}", filter_result.distance, path.to_string_lossy());
+            }
+            found.push(filter_result);
+        }
+    }
+
+    if verbose {
+        eprintln!("Found {} images near target location", found.len());
+    }
+    if sort_by_distance {
+        found.sort_by(|a, b| {
+            a.distance
+                .partial_cmp(&b.distance)
+                .unwrap()
+                .then_with(|| a.path.to_string_lossy().cmp(&b.path.to_string_lossy()))
+        });
+    }
+    if verbose {
+        for f in found.iter() {
+            eprintln!("{}", f.distance);
+        }
+    }
+    found
+}
+
+// FIXME: return Option<bool> for missing attributes
+fn filter_file(path: &Path, target_loc: (f64, f64), radius: f64) -> Option<FilterResult> {
+    let (lat, lon) = match read_exif(path) {
+        Some(loc) => loc,
+        None => {
+            return None;
+        }
+    };
+    // println!("lat: {}", lat);
+    // println!("lon: {}", lon);
+
+    let dist = compute_distance(target_loc, (lat, lon));
+
+    // println!("path: {:?}", path);
+    // println!("distance: {}", dist);
+
+    Some(FilterResult {
+        path: path.to_path_buf(),
+        selected: dist <= radius,
+        distance: dist,
+    })
 }
 
 fn read_exif(path: &Path) -> Option<(f64, f64)> {

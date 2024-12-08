@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+atty = "0.2"
 clap = { version = "4", features = ["derive"] }
 geo = "0.29"
 globwalk = "0"

@@ -1,4 +1,35 @@
+use atty::Stream;
 use clap::Parser;
+use std::io;
+
+fn main() {
+    let args = Cli::parse();
+
+    if is_stdin_piped() {
+        let paths = io::stdin().lines();
+        let found = imnear::search_from_paths(
+            paths,
+            (args.lat, args.lon),
+            args.radius,
+            &args.dir,
+            args.early_stop_count,
+            args.sort_by_distance,
+            args.verbose,
+        );
+        for f in found.iter() {
+            println!("{}", f.path.to_string_lossy());
+        }
+    } else {
+        imnear::search_from_dir(
+            (args.lat, args.lon),
+            args.radius,
+            &args.dir,
+            args.early_stop_count,
+            args.sort_by_distance,
+            args.verbose,
+        );
+    }
+}
 
 /// Search photos near a geographic location
 #[derive(Parser)]
@@ -22,16 +53,6 @@ struct Cli {
     verbose: bool,
 }
 
-fn main() {
-    let args = Cli::parse();
-
-    // imnear::run((args.lat, args.lon), args.radius, &args.dir);
-    imnear::run(
-        (args.lat, args.lon),
-        args.radius,
-        &args.dir,
-        args.early_stop_count,
-        args.sort_by_distance,
-        args.verbose,
-    );
+fn is_stdin_piped() -> bool {
+    !atty::is(Stream::Stdin)
 }
