@@ -133,22 +133,20 @@ impl Searcher {
     //     self.search_from_paths(path_iter)
     // }
 
-    // FIXME: return Option<bool> for missing attributes
     fn filter_file(&self, path: &Path) -> Option<FilterResult> {
-        // let (lat, lon) = match read_exif(path) {
-        let (lat, lon) = match read_exif_kamadak(path) {
-            Some(loc) => loc,
-            None => {
-                return None;
-            }
+        let read_exif: fn(&Path) -> Option<(f64, f64)> = match path.extension().unwrap().to_str() {
+            Some("jpg") => read_exif_kamadak,
+            // Very slow fallback
+            Some("mp4") => read_exif_exiftool,
+            _ => return None,
         };
-        // println!("lat: {}", lat);
-        // println!("lon: {}", lon);
+
+        let (lat, lon) = match read_exif(path) {
+            Some(loc) => loc,
+            None => return None,
+        };
 
         let dist = compute_distance(self.target_loc, (lat, lon));
-
-        // println!("path: {:?}", path);
-        // println!("distance: {}", dist);
 
         Some(FilterResult {
             path: path.to_path_buf(),
@@ -326,7 +324,7 @@ pub struct FilterResult {
 // }
 
 // Much slower than using rust lib
-fn read_exif(path: &Path) -> Option<(f64, f64)> {
+fn read_exif_exiftool(path: &Path) -> Option<(f64, f64)> {
     let output = Command::new("exiftool")
         .arg("-json")
         .arg(path)
@@ -440,7 +438,7 @@ mod tests {
     fn compare_read_exif() {
         let path = Path::new("samples/sample.jpg");
 
-        let loc_exiftool = read_exif(path).unwrap();
+        let loc_exiftool = read_exif_exiftool(path).unwrap();
         let loc_kamadak = read_exif_kamadak(path).unwrap();
 
         assert_eq!(loc_exiftool, loc_kamadak);
