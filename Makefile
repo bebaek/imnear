@@ -44,7 +44,7 @@ demo-pipe-out-view:
 	cargo build
 	fd --full-path .jpg "$(SAMPLE_DIR)" \
 		| "target/debug/$(APP)" "$(TEST_LAT)" "$(TEST_LON)" "$(TEST_RADIUS)" --sort-by-distance \
-		| xargs open
+		| xargs -L 100 open
 
 install-link:
 	rm "$(HOME)/.local/bin/$(APP)"
