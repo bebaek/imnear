@@ -65,6 +65,9 @@ impl Searcher {
 
         self.user_msg(&format!("Found {} images", found.len()));
         for f in found.iter() {
+            self.user_msg(&format!("{}\t{}", f.distance, f.path.to_string_lossy()));
+        }
+        for f in found.iter() {
             println!("{}", f.path.to_string_lossy());
         }
     }
@@ -204,8 +207,8 @@ fn read_exif_kamadak(path: &Path) -> Option<(f64, f64)> {
 }
 
 fn compute_distance((lat0, lon0): (f64, f64), (lat1, lon1): (f64, f64)) -> f64 {
-    let loc0 = Point::new(lat0, lon0);
-    let loc1 = Point::new(lat1, lon1);
+    let loc0 = Point::new(lon0, lat0);
+    let loc1 = Point::new(lon1, lat1);
     let dist = Haversine::distance(loc0, loc1);
     dist
 }
