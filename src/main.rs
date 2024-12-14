@@ -2,12 +2,32 @@ use atty::Stream;
 use clap::Parser;
 use std::io;
 
+pub mod geocode;
+
 fn main() {
     let args = Cli::parse();
 
+    // Use address if provided
+    let coords = match args.address {
+        Some(addr) => geocode::locate(&addr),
+        None => None,
+    };
+    let (lat, lon) = match coords {
+        Some((lat, lon)) => {
+            if args.verbose {
+                eprintln!("Found coordinates: {}, {}", lat, lon)
+            }
+            (lat, lon)
+        }
+        None => (
+            args.lat.expect("Latitude is missing"),
+            args.lon.expect("Longitude is missing"),
+        ),
+    };
+
     let searcher = imnear::Searcher::new(
-        (args.lat, args.lon),
         args.radius,
+        (lat, lon),
         args.early_stop_count,
         args.sort_by_distance,
         args.verbose,
@@ -31,13 +51,14 @@ fn main() {
 #[derive(Parser)]
 struct Cli {
     /// Latitude of the target location
-    #[arg(allow_negative_numbers = true)]
-    lat: f64,
+    #[arg(long, allow_negative_numbers = true)]
+    lat: Option<f64>,
     /// Longitude of the target location
-    #[arg(allow_negative_numbers = true)]
-    lon: f64,
-    /// Max distance from the target location
-    radius: f64,
+    #[arg(long, allow_negative_numbers = true)]
+    lon: Option<f64>,
+    /// Address or search words
+    #[arg(long)]
+    address: Option<String>,
     /// Directory/folder to search from
     #[arg(short, long, default_value_t = String::from("."))]
     dir: String,
@@ -47,6 +68,8 @@ struct Cli {
     sort_by_distance: bool,
     #[arg(short, long, action)]
     verbose: bool,
+    /// Max distance from the target location
+    radius: f64,
 }
 
 fn is_stdin_piped() -> bool {

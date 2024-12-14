@@ -11,19 +11,19 @@ build:
 	cargo build
 
 demo:
-	cargo run -- "$(TEST_LAT)" "$(TEST_LON)" "$(TEST_RADIUS)" --dir "$(SAMPLE_DIR)"
+	cargo run -- --lat "$(TEST_LAT)" --lon "$(TEST_LON)" "$(TEST_RADIUS)" --dir "$(SAMPLE_DIR)"
 
 demo-no-dir:
-	cargo run -- "$(TEST_LAT)" "$(TEST_LON)" "$(TEST_RADIUS)"
+	cargo run -- --lat "$(TEST_LAT)" --lon "$(TEST_LON)" "$(TEST_RADIUS)"
 
 demo-sort-by-distance:
-	cargo run -- "$(TEST_LAT)" "$(TEST_LON)" "$(TEST_RADIUS)" \
+	cargo run -- --lat "$(TEST_LAT)" --lon "$(TEST_LON)" "$(TEST_RADIUS)" \
 		--dir "$(SAMPLE_DIR)" \
 		--sort-by-distance \
 		--verbose
 
 demo-options:
-	cargo run -- "$(TEST_LAT)" "$(TEST_LON)" "$(TEST_RADIUS)" \
+	cargo run -- --lat "$(TEST_LAT)" --lon "$(TEST_LON)" "$(TEST_RADIUS)" \
 		--dir "$(SAMPLE_DIR)" \
 		--early-stop-count 5 \
 		--sort-by-distance \
@@ -31,20 +31,28 @@ demo-options:
 
 demo-pipe-in:
 	cargo build
-	fd --full-path .jpg "$(SAMPLE_DIR)" | "target/debug/$(APP)" "$(TEST_LAT)" "$(TEST_LON)" "$(TEST_RADIUS)" \
+	fd --full-path .jpg "$(SAMPLE_DIR)" | "target/debug/$(APP)" --lat "$(TEST_LAT)" --lon "$(TEST_LON)" "$(TEST_RADIUS)" \
 		--sort-by-distance \
 		--verbose
 
 demo-pipe-in-quiet:
 	cargo build
-	fd --full-path .jpg "$(SAMPLE_DIR)" | "target/debug/$(APP)" "$(TEST_LAT)" "$(TEST_LON)" "$(TEST_RADIUS)" \
+	fd --full-path .jpg "$(SAMPLE_DIR)" | "target/debug/$(APP)" --lat "$(TEST_LAT)" --lon "$(TEST_LON)" "$(TEST_RADIUS)" \
 		--sort-by-distance
 
 demo-pipe-out-view:
 	cargo build
 	fd --full-path .jpg "$(SAMPLE_DIR)" \
-		| "target/debug/$(APP)" "$(TEST_LAT)" "$(TEST_LON)" "$(TEST_RADIUS)" --sort-by-distance \
+		| "target/debug/$(APP)" --lat "$(TEST_LAT)" --lon "$(TEST_LON)" "$(TEST_RADIUS)" --sort-by-distance \
 		| xargs -L 100 open
+
+demo-geocode:
+	cargo build
+	fd --full-path .jpg "$(SAMPLE_DIR)" | "target/debug/$(APP)" \
+		--address "$(TEST_ADDR)" \
+		--sort-by-distance \
+		--verbose \
+		"$(TEST_RADIUS)"
 
 install-link:
 	rm "$(HOME)/.local/bin/$(APP)"

@@ -6,8 +6,8 @@ use std::{
 use geo::{Distance, Haversine, Point};
 
 pub struct Searcher {
-    target_loc: (f64, f64),
     radius: f64,
+    target_loc: (f64, f64),
     early_stop_count: isize,
     sort_by_distance: bool,
     verbose: bool,
@@ -15,15 +15,15 @@ pub struct Searcher {
 
 impl Searcher {
     pub fn new(
-        target_loc: (f64, f64),
         radius: f64,
+        target_loc: (f64, f64),
         early_stop_count: isize,
         sort_by_distance: bool,
         verbose: bool,
     ) -> Searcher {
         Searcher {
-            target_loc,
             radius,
+            target_loc,
             early_stop_count,
             sort_by_distance,
             verbose,
