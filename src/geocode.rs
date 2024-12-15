@@ -2,8 +2,24 @@ use reqwest::{
     blocking::Client,
     header::{HeaderMap, HeaderValue, USER_AGENT},
 };
+use serde_json::Value;
 
-pub fn locate(address: &str) -> Option<(f64, f64)> {
+use crate::cache::Cache;
+
+pub fn locate(address: &str, cache: Cache) -> Option<(f64, f64)> {
+    let res_json = match cache.read(address) {
+        Some(res_json) => res_json,
+        None => {
+            eprintln!("Cache miss");
+            let res_json = request_api(address);
+            cache.write(address, res_json.clone());
+            res_json
+        }
+    };
+    Some(json_to_coords(res_json))
+}
+
+fn request_api(address: &str) -> Value {
     let client = Client::new();
     let url = "https://nominatim.openstreetmap.org/search";
     let mut headers = HeaderMap::new();
@@ -16,14 +32,11 @@ pub fn locate(address: &str) -> Option<(f64, f64)> {
     let url_with_params = reqwest::Url::parse_with_params(url, &params).unwrap();
 
     let res = client.get(url_with_params).headers(headers).send();
-    println!("res: {:?}", res);
     let res_json = match res {
         Ok(res) => res.json::<serde_json::Value>().unwrap(),
         Err(e) => panic!("err: {:?}", e),
     };
-    println!("res_json: {:?}", res_json);
-
-    Some(json_to_coords(res_json))
+    res_json
 }
 
 fn json_to_coords(json_response: serde_json::Value) -> (f64, f64) {

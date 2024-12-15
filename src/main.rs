@@ -1,15 +1,26 @@
 use atty::Stream;
 use clap::Parser;
-use std::io;
+use directories::ProjectDirs;
+use std::{fs, io};
 
+pub mod cache;
 pub mod geocode;
 
 fn main() {
     let args = Cli::parse();
 
+    // Get cache
+    let mut path = ProjectDirs::from("", "", "imnear")
+        .expect("Cannot find app cache dir")
+        .cache_dir()
+        .to_path_buf();
+    path.push("nominatim");
+    fs::create_dir_all(&path).expect("Error creating cache dir");
+    let geocode_cache = cache::Cache::new(&path);
+
     // Use address if provided
     let coords = match args.address {
-        Some(addr) => geocode::locate(&addr),
+        Some(addr) => geocode::locate(&addr, geocode_cache),
         None => None,
     };
     let (lat, lon) = match coords {

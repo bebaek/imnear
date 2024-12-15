@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 atty = "0.2"
 clap = { version = "4", features = ["derive"] }
+directories = "5"
 geo = "0.29"
 globwalk = "0"
 kamadak-exif = "0.6"
