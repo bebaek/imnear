@@ -22,8 +22,6 @@ impl Cache {
     pub fn write(&self, key: &str, json: Value) {
         // FIXME: sanitize key for filename
         let path = self.path.join(key);
-        eprintln!("path: {:?}", &path);
-
         let file = File::create(path).unwrap();
         let mut writer = BufWriter::new(file);
         serde_json::to_writer(&mut writer, &json).unwrap();
@@ -31,8 +29,6 @@ impl Cache {
 
     pub fn read(&self, key: &str) -> Option<Value> {
         let path = self.path.join(key);
-        eprintln!("path: {:?}", &path);
-
         if path.exists() {
             let contents = fs::read_to_string(path).unwrap();
             let json: Value = serde_json::from_str(&contents).unwrap();

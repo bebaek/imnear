@@ -31,24 +31,24 @@ demo-options:
 
 demo-pipe-in:
 	cargo build
-	fd --full-path .jpg "$(SAMPLE_DIR)" | "target/debug/$(APP)" --lat "$(TEST_LAT)" --lon "$(TEST_LON)" "$(TEST_RADIUS)" \
+	fd --absolute-path .jpg "$(SAMPLE_DIR)" | "target/debug/$(APP)" --lat "$(TEST_LAT)" --lon "$(TEST_LON)" "$(TEST_RADIUS)" \
 		--sort-by-distance \
 		--verbose
 
 demo-pipe-in-quiet:
 	cargo build
-	fd --full-path .jpg "$(SAMPLE_DIR)" | "target/debug/$(APP)" --lat "$(TEST_LAT)" --lon "$(TEST_LON)" "$(TEST_RADIUS)" \
+	fd --absolute-path .jpg "$(SAMPLE_DIR)" | "target/debug/$(APP)" --lat "$(TEST_LAT)" --lon "$(TEST_LON)" "$(TEST_RADIUS)" \
 		--sort-by-distance
 
 demo-pipe-out-view:
 	cargo build
-	fd --full-path .jpg "$(SAMPLE_DIR)" \
+	fd --absolute-path .jpg "$(SAMPLE_DIR)" \
 		| "target/debug/$(APP)" --lat "$(TEST_LAT)" --lon "$(TEST_LON)" "$(TEST_RADIUS)" --sort-by-distance \
 		| xargs -L 100 open
 
 demo-geocode:
 	cargo build
-	fd --full-path .jpg "$(SAMPLE_DIR)" | "target/debug/$(APP)" \
+	fd --absolute-path .jpg "$(SAMPLE_DIR)" | "target/debug/$(APP)" \
 		--address "$(TEST_ADDR)" \
 		--sort-by-distance \
 		--verbose \
