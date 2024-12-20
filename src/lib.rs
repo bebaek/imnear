@@ -5,12 +5,16 @@ use std::{
 
 use geo::{Distance, Haversine, Point};
 
+pub mod cache;
+pub use cache::Cache;
+
 pub struct Searcher {
     radius: f64,
     target_loc: (f64, f64),
     early_stop_count: isize,
     sort_by_distance: bool,
     verbose: bool,
+    cache: Cache,
 }
 
 impl Searcher {
@@ -20,6 +24,7 @@ impl Searcher {
         early_stop_count: isize,
         sort_by_distance: bool,
         verbose: bool,
+        cache: Cache,
     ) -> Searcher {
         Searcher {
             radius,
@@ -27,6 +32,7 @@ impl Searcher {
             early_stop_count,
             sort_by_distance,
             verbose,
+            cache,
         }
     }
 
@@ -37,16 +43,16 @@ impl Searcher {
         let filter_result = match self.filter_file(path) {
             Some(result) => result,
             None => {
-                if self.verbose {
-                    eprintln!("Skipping {}", path.to_str().unwrap());
-                }
+                self.user_msg(&format!("Skipping {}", path.to_str().unwrap()));
                 return None;
             }
         };
         if filter_result.selected {
-            if self.verbose {
-                eprintln!("{}\t{}", filter_result.distance, path.to_string_lossy());
-            }
+            self.user_msg(&format!(
+                "{}\t{}",
+                filter_result.distance,
+                path.to_string_lossy()
+            ));
             Some(filter_result)
         } else {
             None
@@ -73,16 +79,29 @@ impl Searcher {
     }
 
     fn filter_file(&self, path: &Path) -> Option<FilterResult> {
-        let read_exif: fn(&Path) -> Option<(f64, f64)> = match path.extension().unwrap().to_str() {
+        let ext = path.extension().unwrap().to_str();
+
+        let read_exif: fn(&Path) -> Option<(f64, f64)> = match ext {
             Some("jpg") => read_exif_kamadak,
             // Very slow fallback
             Some("mp4") => read_exif_exiftool,
             _ => return None,
         };
 
-        let (lat, lon) = match read_exif(path) {
-            Some(loc) => loc,
-            None => return None,
+        // Read from cache or file
+        let key = self.path_to_key(path);
+        let (lat, lon) = match self.cache.read(&key) {
+            Some(res_json) => json_to_coords(res_json),
+            None => {
+                self.user_msg(&format!("Exif cache miss"));
+                let (lat, lon) = match read_exif(path) {
+                    Some(loc) => loc,
+                    None => return None,
+                };
+                let json_des = serde_json::Value::Array(vec![lat.into(), lon.into()]);
+                self.cache.write(&key, json_des);
+                (lat, lon)
+            }
         };
 
         let dist = compute_distance(self.target_loc, (lat, lon));
@@ -98,6 +117,12 @@ impl Searcher {
         if self.verbose {
             eprintln!("{}", msg);
         }
+    }
+
+    fn path_to_key(&self, path: &Path) -> String {
+        path.to_string_lossy()
+            .replace("/", "--")
+            .replace("\\", "--")
     }
 }
 
@@ -213,6 +238,13 @@ fn compute_distance((lat0, lon0): (f64, f64), (lat1, lon1): (f64, f64)) -> f64 {
     dist
 }
 
+fn json_to_coords(json_response: serde_json::Value) -> (f64, f64) {
+    (
+        json_response[0].as_f64().unwrap(),
+        json_response[1].as_f64().unwrap(),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -225,5 +257,13 @@ mod tests {
         let loc_kamadak = read_exif_kamadak(path).unwrap();
 
         assert_eq!(loc_exiftool, loc_kamadak);
+    }
+
+    #[test]
+    fn test_json_to_coords() {
+        let json = serde_json::Value::Array(vec![1.2.into(), 3.4.into()]);
+        let coords = json_to_coords(json);
+
+        assert_eq!(coords, (1.2, 3.4));
     }
 }

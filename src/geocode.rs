@@ -4,7 +4,7 @@ use reqwest::{
 };
 use serde_json::Value;
 
-use crate::cache::Cache;
+use imnear::Cache;
 
 pub fn locate(address: &str, cache: Cache) -> Option<(f64, f64)> {
     let res_json = match cache.read(address) {

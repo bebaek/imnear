@@ -3,20 +3,25 @@ use clap::Parser;
 use directories::ProjectDirs;
 use std::{fs, io};
 
-pub mod cache;
-pub mod geocode;
+use imnear::Cache;
+mod geocode;
 
 fn main() {
     let args = Cli::parse();
 
-    // Get cache
-    let mut path = ProjectDirs::from("", "", "imnear")
+    // Get geocode cache
+    let cache_dir = ProjectDirs::from("", "", "imnear")
         .expect("Cannot find app cache dir")
         .cache_dir()
         .to_path_buf();
-    path.push("nominatim");
-    fs::create_dir_all(&path).expect("Error creating cache dir");
-    let geocode_cache = cache::Cache::new(&path);
+    let geocode_cache_dir = cache_dir.join("nominatim");
+    fs::create_dir_all(&geocode_cache_dir).expect("Error creating geocode cache dir");
+    let geocode_cache = Cache::new(&geocode_cache_dir);
+
+    // Get exif cache
+    let exif_cache_dir = cache_dir.join("exif");
+    fs::create_dir_all(&exif_cache_dir).expect("Error creating exif cache dir");
+    let exif_cache = Cache::new(&exif_cache_dir);
 
     // Use address if provided
     let coords = match args.address {
@@ -36,14 +41,15 @@ fn main() {
         ),
     };
 
+    // Search
     let searcher = imnear::Searcher::new(
         args.radius,
         (lat, lon),
         args.early_stop_count,
         args.sort_by_distance,
         args.verbose,
+        exif_cache,
     );
-
     let found: Vec<_> = if is_stdin_piped() {
         io::stdin()
             .lines()

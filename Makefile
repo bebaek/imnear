@@ -29,6 +29,12 @@ demo-options:
 		--sort-by-distance \
 		--verbose
 
+demo-short:
+	cargo build
+	fd --absolute-path .jpg "$(SAMPLE_DIR)" | head -n 2 | "target/debug/$(APP)" --lat "$(TEST_LAT)" --lon "$(TEST_LON)" "$(TEST_RADIUS)" \
+		--sort-by-distance \
+		--verbose
+
 demo-pipe-in:
 	cargo build
 	fd --absolute-path .jpg "$(SAMPLE_DIR)" | "target/debug/$(APP)" --lat "$(TEST_LAT)" --lon "$(TEST_LON)" "$(TEST_RADIUS)" \

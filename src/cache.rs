@@ -4,6 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use sanitize_filename::sanitize;
 use serde_json::Value;
 
 // FIXME: implement evict
@@ -21,18 +22,21 @@ impl Cache {
 
     pub fn write(&self, key: &str, json: Value) {
         // FIXME: sanitize key for filename
-        let path = self.path.join(key);
-        let file = File::create(path).unwrap();
-        let mut writer = BufWriter::new(file);
-        serde_json::to_writer(&mut writer, &json).unwrap();
+        let path = self.path.join(sanitize(key));
+        if !path.exists() {
+            let file = File::create(path).unwrap();
+            let mut writer = BufWriter::new(file);
+            serde_json::to_writer(&mut writer, &json).unwrap();
+        } else {
+            panic!("Cache file exists: {}", path.to_string_lossy());
+        }
     }
 
     pub fn read(&self, key: &str) -> Option<Value> {
-        let path = self.path.join(key);
+        let path = self.path.join(sanitize(key));
         if path.exists() {
             let contents = fs::read_to_string(path).unwrap();
             let json: Value = serde_json::from_str(&contents).unwrap();
-            eprintln!("cache read: {:?}", json);
             Some(json)
         } else {
             None
