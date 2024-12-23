@@ -127,7 +127,7 @@ impl Searcher {
                         return None;
                     }
                 };
-                let json_des = serde_json::Value::Array(vec![lat.into(), lon.into()]);
+                let json_des = serde_json::json!({"coordinates": [lat, lon]});
                 self.cache.write(&key, json_des);
                 (lat, lon)
             }
@@ -150,8 +150,8 @@ impl Searcher {
 
     fn path_to_key(&self, path: &Path) -> String {
         path.to_string_lossy()
-            .replace("/", "--")
-            .replace("\\", "--")
+            .replace("/", "__")
+            .replace("\\", "__")
     }
 }
 
@@ -263,10 +263,8 @@ fn compute_distance((lat0, lon0): (f64, f64), (lat1, lon1): (f64, f64)) -> f64 {
 }
 
 fn json_to_coords(json_response: serde_json::Value) -> (f64, f64) {
-    (
-        json_response[0].as_f64().unwrap(),
-        json_response[1].as_f64().unwrap(),
-    )
+    let coords = &json_response["coordinates"];
+    (coords[0].as_f64().unwrap(), coords[1].as_f64().unwrap())
 }
 
 #[cfg(test)]
@@ -285,7 +283,7 @@ mod tests {
 
     #[test]
     fn test_json_to_coords() {
-        let json = serde_json::Value::Array(vec![1.2.into(), 3.4.into()]);
+        let json = serde_json::json!({"coordinates": [1.2, 3.4]});
         let coords = json_to_coords(json);
 
         assert_eq!(coords, (1.2, 3.4));
