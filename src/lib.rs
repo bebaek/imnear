@@ -187,48 +187,55 @@ fn read_exif_kamadak(path: &Path) -> Option<(f64, f64)> {
             return None;
         }
     };
-    let lat: f64;
-    let lon: f64;
 
+    // Latitude
     let lat_ref = match &exif.get_field(exif::Tag::GPSLatitudeRef, exif::In::PRIMARY) {
         Some(field) => field.display_value(),
         _ => return None,
     };
-
-    if let exif::Value::Rational(lat_rational) = &exif
+    let lat = match &exif
         .get_field(exif::Tag::GPSLatitude, exif::In::PRIMARY)
         .unwrap()
         .value
     {
-        let sign = if lat_ref.to_string() == "W" { -1 } else { 1 };
-        lat = sign as f64
-            * (lat_rational[0].to_f64()
-                + lat_rational[1].to_f64() / 60.0
-                + lat_rational[2].to_f64() / 60.0 / 60.0)
-    } else {
-        return None;
+        exif::Value::Rational(lat_rational) => coord_rational_to_f64(lat_rational, lat_ref),
+        exif::Value::SRational(lat_rational) => coord_srational_to_f64(lat_rational, lat_ref),
+        _ => return None,
     };
 
-    let lon_ref = &exif
-        .get_field(exif::Tag::GPSLongitudeRef, exif::In::PRIMARY)
-        .unwrap()
-        .display_value();
-
-    if let exif::Value::Rational(lon_rational) = &exif
+    // Longitude
+    let lon_ref = match &exif.get_field(exif::Tag::GPSLongitudeRef, exif::In::PRIMARY) {
+        Some(field) => field.display_value(),
+        _ => return None,
+    };
+    let lon = match &exif
         .get_field(exif::Tag::GPSLongitude, exif::In::PRIMARY)
         .unwrap()
         .value
     {
-        let sign = if lon_ref.to_string() == "W" { -1 } else { 1 };
-        lon = sign as f64
-            * (lon_rational[0].to_f64()
-                + lon_rational[1].to_f64() / 60.0
-                + lon_rational[2].to_f64() / 60.0 / 60.0)
-    } else {
-        return None;
+        exif::Value::Rational(lon_rational) => coord_rational_to_f64(lon_rational, lon_ref),
+        exif::Value::SRational(lon_rational) => coord_srational_to_f64(lon_rational, lon_ref),
+        _ => return None,
     };
 
     Some((lat, lon))
+}
+
+// FIXME: refactor rational vs srational
+fn coord_rational_to_f64<T: ToString>(coord_rational: &Vec<exif::Rational>, coord_ref: T) -> f64 {
+    let sign = if coord_ref.to_string() == "W" { -1 } else { 1 };
+    sign as f64
+        * (coord_rational[0].to_f64()
+            + coord_rational[1].to_f64() / 60.0
+            + coord_rational[2].to_f64() / 60.0 / 60.0)
+}
+
+fn coord_srational_to_f64<T: ToString>(coord_rational: &Vec<exif::SRational>, coord_ref: T) -> f64 {
+    let sign = if coord_ref.to_string() == "W" { -1 } else { 1 };
+    sign as f64
+        * (coord_rational[0].to_f64()
+            + coord_rational[1].to_f64() / 60.0
+            + coord_rational[2].to_f64() / 60.0 / 60.0)
 }
 
 fn compute_distance((lat0, lon0): (f64, f64), (lat1, lon1): (f64, f64)) -> f64 {
