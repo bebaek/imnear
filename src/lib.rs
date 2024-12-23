@@ -79,24 +79,53 @@ impl Searcher {
     }
 
     fn filter_file(&self, path: &Path) -> Option<FilterResult> {
-        let ext = path.extension().unwrap().to_str();
-
-        let read_exif: fn(&Path) -> Option<(f64, f64)> = match ext {
-            Some("jpg") => read_exif_kamadak,
-            // Very slow fallback
-            Some("mp4") => read_exif_exiftool,
-            _ => return None,
-        };
+        let ext = path.extension().unwrap().to_ascii_lowercase();
 
         // Read from cache or file
         let key = self.path_to_key(path);
+        let path_str = path.to_string_lossy();
         let (lat, lon) = match self.cache.read(&key) {
             Some(res_json) => json_to_coords(res_json),
+            // Cache miss
             None => {
                 self.user_msg(&format!("Exif cache miss"));
-                let (lat, lon) = match read_exif(path) {
-                    Some(loc) => loc,
-                    None => return None,
+                let (lat, lon) = match ext.to_str() {
+                    Some("jpg") => match read_exif_kamadak(path) {
+                        Ok(Some(coords)) => coords,
+                        Ok(None) => {
+                            self.user_msg(&format!(
+                                "Found no coordinates by primary parser in {}",
+                                path_str
+                            ));
+                            // TODO: cache none coords
+                            return None;
+                        }
+                        // FIXME: Log error msg
+                        Err(_) => match read_exif_exiftool(path) {
+                            Some(coords) => coords,
+                            _ => {
+                                self.user_msg(&format!(
+                                    "Found no coordinates by secondary parser in {}",
+                                    path_str
+                                ));
+                                return None;
+                            }
+                        },
+                    },
+                    Some("mp4") => match read_exif_exiftool(path) {
+                        Some(coords) => coords,
+                        _ => {
+                            self.user_msg(&format!(
+                                "Found no coordinates by secondary parser {}",
+                                path_str
+                            ));
+                            return None;
+                        }
+                    },
+                    _ => {
+                        self.user_msg(&format!("Unsupported type for {}", path_str));
+                        return None;
+                    }
                 };
                 let json_des = serde_json::Value::Array(vec![lat.into(), lon.into()]);
                 self.cache.write(&key, json_des);
@@ -170,28 +199,16 @@ fn read_exif_exiftool(path: &Path) -> Option<(f64, f64)> {
     Some((lat_f, lon_f))
 }
 
-fn read_exif_kamadak(path: &Path) -> Option<(f64, f64)> {
+fn read_exif_kamadak(path: &Path) -> Result<Option<(f64, f64)>, exif::Error> {
     let file = std::fs::File::open(path).unwrap();
     let mut bufreader = std::io::BufReader::new(&file);
     let exifreader = exif::Reader::new();
-    // Handle error?
-    let exif = match exifreader.read_from_container(&mut bufreader) {
-        Ok(exif) => exif,
-        Err(e) => {
-            // Happened once for an unknown reason
-            eprintln!(
-                "Error reading from file {}: {:?}",
-                path.to_string_lossy(),
-                e
-            );
-            return None;
-        }
-    };
+    let exif = exifreader.read_from_container(&mut bufreader)?;
 
     // Latitude
     let lat_ref = match &exif.get_field(exif::Tag::GPSLatitudeRef, exif::In::PRIMARY) {
         Some(field) => field.display_value(),
-        _ => return None,
+        _ => return Ok(None),
     };
     let lat = match &exif
         .get_field(exif::Tag::GPSLatitude, exif::In::PRIMARY)
@@ -200,13 +217,13 @@ fn read_exif_kamadak(path: &Path) -> Option<(f64, f64)> {
     {
         exif::Value::Rational(lat_rational) => coord_rational_to_f64(lat_rational, lat_ref),
         exif::Value::SRational(lat_rational) => coord_srational_to_f64(lat_rational, lat_ref),
-        _ => return None,
+        _ => return Ok(None),
     };
 
     // Longitude
     let lon_ref = match &exif.get_field(exif::Tag::GPSLongitudeRef, exif::In::PRIMARY) {
         Some(field) => field.display_value(),
-        _ => return None,
+        _ => return Ok(None),
     };
     let lon = match &exif
         .get_field(exif::Tag::GPSLongitude, exif::In::PRIMARY)
@@ -215,10 +232,10 @@ fn read_exif_kamadak(path: &Path) -> Option<(f64, f64)> {
     {
         exif::Value::Rational(lon_rational) => coord_rational_to_f64(lon_rational, lon_ref),
         exif::Value::SRational(lon_rational) => coord_srational_to_f64(lon_rational, lon_ref),
-        _ => return None,
+        _ => return Ok(None),
     };
 
-    Some((lat, lon))
+    Ok(Some((lat, lon)))
 }
 
 // FIXME: refactor rational vs srational
@@ -261,7 +278,7 @@ mod tests {
         let path = Path::new("samples/sample.jpg");
 
         let loc_exiftool = read_exif_exiftool(path).unwrap();
-        let loc_kamadak = read_exif_kamadak(path).unwrap();
+        let loc_kamadak = read_exif_kamadak(path).unwrap().unwrap();
 
         assert_eq!(loc_exiftool, loc_kamadak);
     }
