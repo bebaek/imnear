@@ -5,8 +5,11 @@ use std::{
 
 use geo::{Distance, Haversine, Point};
 
-pub mod cache;
 pub use cache::Cache;
+pub use photo_metadata::PhotoMetadata;
+
+pub mod cache;
+pub mod photo_metadata;
 
 pub struct Searcher {
     radius: f64,
@@ -84,8 +87,9 @@ impl Searcher {
         // Read from cache or file
         let key = self.path_to_key(path);
         let path_str = path.to_string_lossy();
-        let (lat, lon) = match self.cache.read(&key) {
-            Some(res_json) => json_to_coords(res_json),
+        let cache_read: Option<PhotoMetadata> = self.cache.read_into(&key);
+        let (lat, lon) = match cache_read {
+            Some(metadata) => metadata.coordinates.unwrap(),
             // Cache miss
             None => {
                 self.user_msg(&format!("Exif cache miss"));
@@ -127,8 +131,10 @@ impl Searcher {
                         return None;
                     }
                 };
-                let json_des = serde_json::json!({"coordinates": [lat, lon]});
-                self.cache.write(&key, json_des);
+                let md = PhotoMetadata {
+                    coordinates: Some((lat, lon)),
+                };
+                self.cache.write_from(&key, &md);
                 (lat, lon)
             }
         };
@@ -269,7 +275,10 @@ fn json_to_coords(json_response: serde_json::Value) -> (f64, f64) {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::*;
+    use tempfile::tempdir;
 
     #[test]
     fn compare_read_exif() {
@@ -287,5 +296,41 @@ mod tests {
         let coords = json_to_coords(json);
 
         assert_eq!(coords, (1.2, 3.4));
+    }
+
+    // Smoke test yet
+    #[test]
+    fn filter_path() {
+        let radius = 10000.0;
+        let target_loc = (10.0, 10.0);
+        let early_stop_count = 10;
+        let sort_by_distance = true;
+        let verbose = true;
+
+        let temp_dir = tempdir().unwrap();
+        let temp_path = temp_dir.path();
+        let exif_cache_dir = temp_path.join("exif");
+        fs::create_dir_all(&exif_cache_dir).expect("Error creating exif cache dir");
+        let exif_cache = Cache::new(&exif_cache_dir);
+
+        let searcher = Searcher::new(
+            radius,
+            target_loc,
+            early_stop_count,
+            sort_by_distance,
+            verbose,
+            exif_cache,
+        );
+
+        // Read from photo
+        let photo_dir = temp_path.join("photos");
+        fs::create_dir_all(&photo_dir).expect("Error creating temp photos dir");
+        let sample_photo_path = photo_dir.join("sample.jpg");
+        fs::copy("samples/sample.jpg", &sample_photo_path).unwrap();
+        searcher.filter_by_path_str(sample_photo_path.to_str().unwrap());
+
+        // Read from cache
+        fs::remove_file(&sample_photo_path).unwrap();
+        searcher.filter_by_path_str(sample_photo_path.to_str().unwrap());
     }
 }
