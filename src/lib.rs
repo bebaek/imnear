@@ -46,7 +46,10 @@ impl Searcher {
         let filter_result = match self.filter_file(path) {
             Some(result) => result,
             None => {
-                self.user_msg(&format!("Skipping {}", path.to_str().unwrap()));
+                self.user_msg(&format!(
+                    "Skipping {} because no location info is found",
+                    path.to_str().unwrap()
+                ));
                 return None;
             }
         };
@@ -88,64 +91,72 @@ impl Searcher {
         let key = self.path_to_key(path);
         let path_str = path.to_string_lossy();
         let cache_read: Option<PhotoMetadata> = self.cache.read_into(&key);
-        let (lat, lon) = match cache_read {
-            Some(metadata) => metadata.coordinates.unwrap(),
+        let metadata = match cache_read {
+            Some(metadata) => metadata,
             // Cache miss
             None => {
                 self.user_msg(&format!("Exif cache miss"));
-                let (lat, lon) = match ext.to_str() {
+                let metadata = match ext.to_str() {
                     Some("jpg") => match read_exif_kamadak(path) {
-                        Ok(Some(coords)) => coords,
+                        Ok(Some(coords)) => PhotoMetadata {
+                            coordinates: Some(coords),
+                        },
                         Ok(None) => {
                             self.user_msg(&format!(
                                 "Found no coordinates by primary parser in {}",
                                 path_str
                             ));
-                            // TODO: cache none coords
-                            return None;
+                            PhotoMetadata::default()
                         }
                         // FIXME: Log error msg
                         Err(_) => match read_exif_exiftool(path) {
-                            Some(coords) => coords,
+                            Some(coords) => PhotoMetadata {
+                                coordinates: Some(coords),
+                            },
                             _ => {
                                 self.user_msg(&format!(
                                     "Found no coordinates by secondary parser in {}",
                                     path_str
                                 ));
-                                return None;
+                                PhotoMetadata::default()
                             }
                         },
                     },
                     Some("mp4") => match read_exif_exiftool(path) {
-                        Some(coords) => coords,
+                        Some(coords) => PhotoMetadata {
+                            coordinates: Some(coords),
+                        },
                         _ => {
                             self.user_msg(&format!(
                                 "Found no coordinates by secondary parser {}",
                                 path_str
                             ));
-                            return None;
+                            PhotoMetadata::default()
                         }
                     },
                     _ => {
                         self.user_msg(&format!("Unsupported type for {}", path_str));
-                        return None;
+                        PhotoMetadata::default()
                     }
                 };
-                let md = PhotoMetadata {
-                    coordinates: Some((lat, lon)),
-                };
-                self.cache.write_from(&key, &md);
-                (lat, lon)
+                self.cache.write_from(&key, &metadata);
+                metadata
             }
         };
 
-        let dist = compute_distance(self.target_loc, (lat, lon));
+        // Filter by distance
+        match metadata.coordinates {
+            Some(coords) => {
+                let dist = compute_distance(self.target_loc, coords);
 
-        Some(FilterResult {
-            path: path.to_path_buf(),
-            selected: dist <= self.radius,
-            distance: dist,
-        })
+                Some(FilterResult {
+                    path: path.to_path_buf(),
+                    selected: dist <= self.radius,
+                    distance: dist,
+                })
+            }
+            _ => None,
+        }
     }
 
     fn user_msg(&self, msg: &str) {
@@ -268,11 +279,6 @@ fn compute_distance((lat0, lon0): (f64, f64), (lat1, lon1): (f64, f64)) -> f64 {
     dist
 }
 
-fn json_to_coords(json_response: serde_json::Value) -> (f64, f64) {
-    let coords = &json_response["coordinates"];
-    (coords[0].as_f64().unwrap(), coords[1].as_f64().unwrap())
-}
-
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -290,17 +296,18 @@ mod tests {
         assert_eq!(loc_exiftool, loc_kamadak);
     }
 
-    #[test]
-    fn test_json_to_coords() {
-        let json = serde_json::json!({"coordinates": [1.2, 3.4]});
-        let coords = json_to_coords(json);
-
-        assert_eq!(coords, (1.2, 3.4));
-    }
-
     // Smoke test yet
     #[test]
-    fn filter_path() {
+    fn filter_path_with_location() {
+        test_filter_path_with_photo("sample.jpg");
+    }
+
+    #[test]
+    fn filter_path_no_location() {
+        test_filter_path_with_photo("sample-no-coords.jpg");
+    }
+
+    fn test_filter_path_with_photo(filename: &str) {
         let radius = 10000.0;
         let target_loc = (10.0, 10.0);
         let early_stop_count = 10;
@@ -325,8 +332,9 @@ mod tests {
         // Read from photo
         let photo_dir = temp_path.join("photos");
         fs::create_dir_all(&photo_dir).expect("Error creating temp photos dir");
-        let sample_photo_path = photo_dir.join("sample.jpg");
-        fs::copy("samples/sample.jpg", &sample_photo_path).unwrap();
+        let sample_photo_path = photo_dir.join(filename);
+        let original_photo_path = Path::new("samples").join(filename);
+        fs::copy(original_photo_path, &sample_photo_path).unwrap();
         searcher.filter_by_path_str(sample_photo_path.to_str().unwrap());
 
         // Read from cache
