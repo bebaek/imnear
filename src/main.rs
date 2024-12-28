@@ -6,7 +6,7 @@ use std::{fs, io};
 use imnear::Cache;
 mod geocode;
 
-fn main() {
+fn main() -> Result<(), String> {
     let args = Cli::parse();
 
     // Get geocode cache
@@ -25,7 +25,10 @@ fn main() {
 
     // Use address if provided
     let coords = match args.address {
-        Some(addr) => geocode::locate(&addr, geocode_cache),
+        Some(addr) => match geocode::locate(&addr, geocode_cache) {
+            Some(coords) => Some(coords),
+            _ => return Err(format!("Found no location info for {}", &addr)),
+        },
         None => None,
     };
     let (lat, lon) = match coords {
@@ -62,6 +65,8 @@ fn main() {
     };
 
     searcher.print_result(found);
+
+    Ok(())
 }
 
 /// Search photos near a geographic location

@@ -10,13 +10,13 @@ pub fn locate(address: &str, cache: Cache) -> Option<(f64, f64)> {
     let res_json = match cache.read(address) {
         Some(res_json) => res_json,
         None => {
-            eprintln!("Cache miss");
+            eprintln!("Address cache miss");
             let res_json = request_api(address);
             cache.write(address, res_json.clone());
             res_json
         }
     };
-    Some(json_to_coords(res_json))
+    json_to_coords(res_json)
 }
 
 fn request_api(address: &str) -> Value {
@@ -39,9 +39,17 @@ fn request_api(address: &str) -> Value {
     res_json
 }
 
-fn json_to_coords(json_response: serde_json::Value) -> (f64, f64) {
+fn json_to_coords(json_response: serde_json::Value) -> Option<(f64, f64)> {
     let coords = &json_response["features"][0]["geometry"]["coordinates"];
-    (coords[1].as_f64().unwrap(), coords[0].as_f64().unwrap())
+    let lat = match coords[1].as_f64() {
+        Some(lat) => lat,
+        _ => return None,
+    };
+    let lon = match coords[0].as_f64() {
+        Some(lon) => lon,
+        _ => return None,
+    };
+    Some((lat, lon))
 }
 
 #[cfg(test)]
@@ -49,7 +57,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_json_to_coords() {
+    fn json_to_coords_valid() {
         let json_response = r#"
 {
   "type": "FeatureCollection",
@@ -140,8 +148,18 @@ mod tests {
 "#;
         let des = serde_json::from_str(&json_response).unwrap();
 
-        let coords = json_to_coords(des);
+        let coords = json_to_coords(des).unwrap();
 
         assert_eq!(coords, (45.9645464, -108.276076));
+    }
+
+    #[test]
+    fn json_to_coords_missing_key() {
+        let json_response = r#"{"features": []}"#;
+        let des = serde_json::from_str(&json_response).unwrap();
+
+        let coords = json_to_coords(des);
+
+        assert!(coords.is_none());
     }
 }
